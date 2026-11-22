@@ -1,0 +1,193 @@
+
+#include <math.h>
+
+// 1. PINOS 
+const int NTC = A0, RELE = 7;
+const int ROXO = 2, VERDE = 3, AZUL = 4;
+
+// 2. CONFIGURACOES 
+const float SETPOINT = 34.0, TOLERANCIA = 1.0;
+const float RESISTOR = 83000.0, NTC_25 = 100000.0;
+const float BETA = 3950.0;
+
+const unsigned long ESPERA = 5000;
+const unsigned long LEITURA = 2500;
+const unsigned long IMPRESSAO = 2500;
+
+// 3. VARIAVEIS 
+unsigned long inicio, ultimaLeitura = 0, ultimoPrint = 0;
+unsigned long inicioAquecimento = 0, tempoSetpoint = 0;
+
+float temperatura = 0;
+
+bool primeira = true;
+bool aquecedor = false;
+bool iniciou = false;
+bool atingiu = false;
+
+// 4. MOSTRA TEMPO HH:MM:SS 
+void mostrarTempo(unsigned long s) {
+  if (s / 3600 < 10) Serial.print("0");
+  Serial.print(s / 3600);
+  Serial.print(":");
+  if ((s % 3600) / 60 < 10) Serial.print("0");
+  Serial.print((s % 3600) / 60);
+  Serial.print(":");
+  if (s % 60 < 10) Serial.print("0");
+  Serial.print(s % 60);
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(RELE, OUTPUT);
+  pinMode(ROXO, OUTPUT);
+  pinMode(VERDE, OUTPUT);
+  pinMode(AZUL, OUTPUT);
+
+  digitalWrite(RELE, LOW);
+
+  inicio = millis();
+
+  Serial.println("SISTEMA INICIADO");
+  Serial.println("Aguardando estabilizacao do sensor...");
+}
+
+void loop() {
+
+  // 5. ENCERRAMENTO COM F OU f 
+  if (Serial.available() > 0) {
+    char comando = Serial.read();
+
+    if (comando == 'f' || comando == 'F') {
+      digitalWrite(RELE, LOW);
+      digitalWrite(ROXO, LOW);
+      digitalWrite(VERDE, LOW);
+      digitalWrite(AZUL, LOW);
+
+      Serial.println("\nEXPERIMENTO FINALIZADO");
+
+      Serial.print("Tempo total: ");
+      mostrarTempo((millis() - inicio) / 1000);
+      Serial.println();
+
+      if (atingiu) {
+        Serial.print("Tempo ate o setpoint: ");
+        Serial.print(tempoSetpoint / 1000.0, 1);
+        Serial.println(" segundos");
+      } else {
+        Serial.println("Setpoint nao atingido.");
+      }
+
+      Serial.println("AQUECEDOR DESLIGADO");
+
+      while (true);
+    }
+  }
+
+  unsigned long agora = millis();
+
+  // 6. LEITURA DO SENSOR 
+  if (agora - ultimaLeitura < LEITURA) return;
+  ultimaLeitura = agora;
+
+  int leitura = analogRead(NTC);
+
+  if (leitura <= 0 || leitura >= 1023) {
+    digitalWrite(RELE, LOW);
+    digitalWrite(ROXO, HIGH);
+    digitalWrite(VERDE, LOW);
+    digitalWrite(AZUL, LOW);
+    aquecedor = false;
+    primeira = true;
+    Serial.println("ERRO NO SENSOR!");
+    return;
+  }
+
+  // 7. CALCULO DA TEMPERATURA 
+  float R = RESISTOR * (1023.0 / leitura - 1.0);
+  float K = 1.0 / (1.0 / 298.15 + log(R / NTC_25) / BETA);
+  float atual = K - 273.15;
+
+  if (isnan(atual) || isinf(atual) || atual < 0 || atual > 85) {
+    digitalWrite(RELE, LOW);
+    digitalWrite(ROXO, HIGH);
+    digitalWrite(VERDE, LOW);
+    digitalWrite(AZUL, LOW);
+    aquecedor = false;
+    primeira = true;
+    Serial.println("ERRO NO SENSOR!");
+    return;
+  }
+
+  // 8. FILTRO 
+  if (primeira) {
+    temperatura = atual;
+    primeira = false;
+  } else {
+    temperatura = 0.15 * atual + 0.85 * temperatura;
+  }
+
+  // 9. AGUARDA
+  if (agora - inicio < ESPERA) {
+    Serial.print("INICIALIZANDO | Temperatura: ");
+    Serial.print(temperatura, 2);
+    Serial.println(" °C");
+    return;
+  }
+
+  // 10. LEDS
+  digitalWrite(AZUL, temperatura < SETPOINT - TOLERANCIA);
+  digitalWrite(VERDE, temperatura >= SETPOINT - TOLERANCIA &&
+                       temperatura <= SETPOINT + TOLERANCIA);
+  digitalWrite(ROXO, temperatura > SETPOINT + TOLERANCIA);
+
+  // 11. CONTROLE DO AQUECEDOR 
+  if (temperatura < SETPOINT - TOLERANCIA) aquecedor = true;
+  if (temperatura > SETPOINT + TOLERANCIA) aquecedor = false;
+
+  digitalWrite(RELE, aquecedor ? HIGH : LOW);
+
+  // 12. INICIO DO AQUECIMENTO 
+  if (aquecedor && !iniciou) {
+    iniciou = true;
+    inicioAquecimento = agora;
+    Serial.println("\nINICIO DO AQUECIMENTO");
+  }
+
+  // 12. DETECCAO DO SETPOINT 
+  if (iniciou && !atingiu && temperatura >= SETPOINT) {
+    atingiu = true;
+    tempoSetpoint = agora - inicioAquecimento;
+
+    Serial.println("\nSETPOINT ATINGIDO!");
+    Serial.print("Tempo: ");
+    Serial.print(tempoSetpoint / 1000.0, 1);
+    Serial.println(" segundos");
+  }
+
+  // 13. MONITOR SERIAL 
+  if (agora - ultimoPrint >= IMPRESSAO) {
+    ultimoPrint = agora;
+
+    Serial.print("Tempo: ");
+    mostrarTempo((agora - inicio) / 1000);
+
+    Serial.print(" Temperatura: ");
+    Serial.print(temperatura, 2);
+
+    Serial.print(" °C | Setpoint: ");
+    Serial.print(SETPOINT, 2);
+
+    Serial.print(" °C | Aquecedor: ");
+    Serial.print(aquecedor ? "LIGADO" : "DESLIGADO");
+
+    if (atingiu) {
+      Serial.print(" | Tempo ate setpoint: ");
+      Serial.print(tempoSetpoint / 1000.0, 1);
+      Serial.print(" s");
+    }
+
+    Serial.println();
+  }
+}

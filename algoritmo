@@ -1,11 +1,21 @@
 
 #include <math.h>
 
-// 1. PINOS 
+// 1. Definição dos pinos: estabelece os pinos do Arduino utilizados no sistema: A0 para leitura do sensor NTC
+//D7 para controle do relé e D2, D3 e D4 para acionamento dos LEDs roxo, verde e azul, respectivamente. A declaração const int 
+//define valores inteiros constantes, impedindo sua alteração durante a execução do programa.
+
+  // 1. PINOS 
 const int NTC = A0, RELE = 7;
 const int ROXO = 2, VERDE = 3, AZUL = 4;
 
-// 2. CONFIGURACOES 
+// 2. Configurações: define os parâmetros constantes do sistema: SETPOINT (34 °C), temperatura desejada; TOLERANCIA (1 °C), variação aceitáel
+//RESISTOR (83.000 Ω), resistência fixa do divisor de tensão; NTC_25 (100.000 Ω), resistência nominal do sensor a 25 °C
+//e BETA (3950 K), constante característica do termistor. Também estabelece os intervalos de tempo: ESPERA (5 s), estabilização inicial do sensor
+// LEITURA (2,5 s), intervalo entre medições; e IMPRESSAO (2,5 s), intervalo de exibição dos dados no Monitor Serial.
+// O tipo float armazena valores decimais, enquanto unsigned long armazena números inteiros não negativos, utilizados na temporização em milissegundos.
+
+  // 2. CONFIGURACOES 
 const float SETPOINT = 34.0, TOLERANCIA = 1.0;
 const float RESISTOR = 83000.0, NTC_25 = 100000.0;
 const float BETA = 3950.0;
@@ -14,7 +24,16 @@ const unsigned long ESPERA = 5000;
 const unsigned long LEITURA = 2500;
 const unsigned long IMPRESSAO = 2500;
 
-// 3. VARIAVEIS 
+// 3. Variáveis:declara as variáveis utilizadas durante a execução do programa, classificadas conforme seus tipos:
+
+//unsigned long:armazena números inteiros não negativos, adequados à contagem de tempo em milissegundos. Inclui inicio (inicialização do sistema)
+//ultimaLeitura (momento da última medição); ultimoPrint (última exibição no Monitor Serial); inicioAquecimento (início do acionamento do aquecedor) 
+//e tempoSetpoint (tempo necessário para atingir a temperatura desejada).
+//float: armazena números com casas decimais. A variável temperatura registra a temperatura calculada após a aplicação do filtro.
+//bool:armazena estados lógicos, verdadeiro (true) ou falso (false). Inclui primeira (identifica a primeira leitura)
+//aquecedor(indica se o aquecedor está acionado), `iniciou` (registra se o aquecimento já começou) e `atingiu` (indica se o setpoint já foi alcançado).
+
+  // 3. VARIAVEIS 
 unsigned long inicio, ultimaLeitura = 0, ultimoPrint = 0;
 unsigned long inicioAquecimento = 0, tempoSetpoint = 0;
 
@@ -25,7 +44,14 @@ bool aquecedor = false;
 bool iniciou = false;
 bool atingiu = false;
 
-// 4. MOSTRA TEMPO HH:MM:SS 
+
+// 4. Exibição do tempo (HH:MM:SS): define a função mostrarTempo(), responsável por converter um tempo em segundos (s) 
+//para o formato horas:minutos:segundos. O tipo void indica que a função não retorna um valor, apenas exibe o resultado no 
+//Monitor Serial. O tipo unsigned long permite receber o tempo como número inteiro não negativo. As divisões por 3600 e 60 
+//calculam as horas e os minutos, enquanto o operador % obtém os restos das divisões para determinar os minutos restantes e 
+//os segundos. O comando Serial.print() exibe os valores, acrescentando zeros à esquerda quando necessário para manter o formato HH:MM:SS.
+
+  //4. MOSTRA TEMPO HH:MM:SS 
 void mostrarTempo(unsigned long s) {
   if (s / 3600 < 10) Serial.print("0");
   Serial.print(s / 3600);
@@ -37,6 +63,11 @@ void mostrarTempo(unsigned long s) {
   Serial.print(s % 60);
 }
 
+// 5. Inicialização (setup()): executada uma única vez ao ligar o Arduino. Inicia a comunicação com o computador a 9600 bits/s (Serial.begin)
+//configura o relé e os LEDs como saídas (pinMode), mantém o relé inicialmente em LOW (digitalWrite), registra o tempo inicial com millis()
+//e exibe mensagens no Monitor Serial (Serial.println).
+
+  //5. Inicialização 
 void setup() {
   Serial.begin(9600);
 
@@ -53,9 +84,17 @@ void setup() {
   Serial.println("Aguardando estabilizacao do sensor...");
 }
 
+// 6. Execução contínua (loop()): executa repetidamente as instruções de leitura da temperatura, controle do aquecedor
+//LEDs e monitoramento do sistema, enquanto o programa estiver em funcionamento.
+
+  //6. EXECUÇÃO CONTÍNUA
 void loop() {
 
-  // 5. ENCERRAMENTO COM F OU f 
+// 7. Encerramento do experimento:verifica se o usuário digitou F ou f no Monitor Serial (Serial.available() e Serial.read()). 
+//Ao receber o comando, coloca o relé e os LEDs em LOW, exibe o tempo total, informa o tempo até atingir o setpoint 
+//(caso tenha sido alcançado) e interrompe a execução do programa com while (true). 
+
+  //7. ENCERRAMENTO COM F OU f 
   if (Serial.available() > 0) {
     char comando = Serial.read();
 
@@ -85,9 +124,20 @@ void loop() {
     }
   }
 
+// 8. Atualização do tempo: a instrução unsigned long agora = millis() registra, em milissegundos, o tempo decorrido 
+//desde o início da execução do Arduino. Esse valor é utilizado para controlar os intervalos de leitura, exibição dos dados
+// e demais operações temporizadas do programa.
+
+  //8. ATUALIZAÇÃO DO TEMPO 
   unsigned long agora = millis();
 
-  // 6. LEITURA DO SENSOR 
+// 9. Leitura do sensor:realiza a leitura analógica do NTC pelo comando analogRead(), em intervalos de 2,5 segundos
+//controlados por agora, ultimaLeitura e LEITURA. O comando return impede uma nova leitura antes desse intervalo. 
+//se o valor estiver fora da faixa válida (1 a 1022), o programa coloca o relé em LOW, aciona o sinal de erro pelo 
+//LED roxo (HIGH), atualiza as variáveis de controle, exibe “ERRO NO SENSOR!” e interrompe o ciclo atual para evitar
+// o uso de uma leitura inválida.
+
+  //9. LEITURA DO SENSOR 
   if (agora - ultimaLeitura < LEITURA) return;
   ultimaLeitura = agora;
 
@@ -104,7 +154,13 @@ void loop() {
     return;
   }
 
-  // 7. CALCULO DA TEMPERATURA 
+// 10. Cálculo da temperatura:calcula a resistência do sensor NTC (R) a partir da leitura analógica e do resistor fixo de 83 kΩ.
+//Em seguida, utiliza a equação Beta para converter essa resistência em temperatura Kelvin (K) e, posteriormente
+//em Celsius (atual), subtraindo 273,15. O programa verifica se o resultado é inválido (isnan` ou isinf) ou está fora da faixa
+// de 0 a 85 °C. Caso isso ocorra, coloca o relé em LOW, sinaliza o erro pelo LED roxo, reinicia as variáveis de controle
+// exibe “ERRO NO SENSOR!” e encerra o ciclo atual com return.
+
+  // 10. CALCULO DA TEMPERATURA 
   float R = RESISTOR * (1023.0 / leitura - 1.0);
   float K = 1.0 / (1.0 / 298.15 + log(R / NTC_25) / BETA);
   float atual = K - 273.15;
@@ -120,7 +176,11 @@ void loop() {
     return;
   }
 
-  // 8. FILTRO 
+// 11. Filtro: aplica um filtro exponencial para suavizar as oscilações da temperatura. Na primeira leitura válida (`primeira = true`)
+//o valor medido (atual) é armazenado diretamente em temperatura, e primeira passa a ser false. Nas leituras seguintes
+//o filtro atualiza a temperatura utilizando 15% da medição atual e 85% do valor filtrado anterior, reduzindo variações bruscas.
+
+  // 11. FILTRO 
   if (primeira) {
     temperatura = atual;
     primeira = false;
@@ -128,7 +188,11 @@ void loop() {
     temperatura = 0.15 * atual + 0.85 * temperatura;
   }
 
-  // 9. AGUARDA
+// 12. Espera inicial: durante os primeiros 5 segundos (`ESPERA = 5000`), o programa exibe a temperatura no Monitor Serial 
+//enquanto aguarda a estabilização do sensor. O comando `return` encerra o ciclo atual do `loop()`, impedindo temporariamente
+//a execução das rotinas de controle do aquecedor e dos LEDs. Após esse período, o programa segue normalmente.
+
+  // 12. AGUARDA
   if (agora - inicio < ESPERA) {
     Serial.print("INICIALIZANDO | Temperatura: ");
     Serial.print(temperatura, 2);
@@ -136,26 +200,46 @@ void loop() {
     return;
   }
 
-  // 10. LEDS
+// 13. Controle dos LEDs: utiliza digitalWrite()`para definir os estados dos LEDs conforme a temperatura medida 
+//e o setpoint de 34 °C, com tolerância de ±1 °C. O pino do LED azul recebe HIGH abaixo de 33 °C; o verde, entre 33 °C
+//e 35 °C (inclusive); e o roxo, acima de 35 °C. Os demais pinos recebem LOW. Assim, o programa define a sinalização 
+//visual de cada faixa de temperatura.
+
+  // 13. LEDS
   digitalWrite(AZUL, temperatura < SETPOINT - TOLERANCIA);
   digitalWrite(VERDE, temperatura >= SETPOINT - TOLERANCIA &&
                        temperatura <= SETPOINT + TOLERANCIA);
   digitalWrite(ROXO, temperatura > SETPOINT + TOLERANCIA);
 
-  // 11. CONTROLE DO AQUECEDOR 
+  //14. Controle do aquecedor: utiliza a lógica de histerese para controlar o aquecedor por meio do relé. 
+  //Abaixo de 33 °C, aquecedor recebe true (ligado); acima de 35 °C, recebe false (desligado). Entre esses limites
+  //mantém o estado anterior, evitando acionamentos frequentes. O comando digitalWrite() envia HIGH ou LOW ao pino D7
+  // conforme o valor de aquecedor, para controlar o relé.
+
+  // 14. CONTROLE DO AQUECEDOR 
   if (temperatura < SETPOINT - TOLERANCIA) aquecedor = true;
   if (temperatura > SETPOINT + TOLERANCIA) aquecedor = false;
 
   digitalWrite(RELE, aquecedor ? HIGH : LOW);
 
-  // 12. INICIO DO AQUECIMENTO 
+//15. Início do aquecimento: verifica se o aquecedor está ligado (aquecedor = truE) e se o aquecimento ainda não foi 
+//registrado (!iniciou). Quando ambas as condições são atendidas, define iniciou = true, registra o instante inicial
+//em inicioAquecimento usando o valor de agora e exibe a mensagem “INICIO DO AQUECIMENTO” no Monitor Serial. 
+//Esse registro ocorre apenas uma vez e permite calcular posteriormente o tempo até atingir o setpoint.
+
+  // 15. INICIO DO AQUECIMENTO 
   if (aquecedor && !iniciou) {
     iniciou = true;
     inicioAquecimento = agora;
     Serial.println("\nINICIO DO AQUECIMENTO");
   }
 
-  // 12. DETECCAO DO SETPOINT 
+//16. Detecção do setpoint: verifica se o aquecimento já começou (iniciou), se o setpoint ainda não foi atingido (!atingiu)
+//e se a temperatura alcançou 34 °C (temperatura >= SETPOINT). Quando essas condições são atendidas, registra atingiu = true
+//calcula o tempo decorrido desde o início do aquecimento (tempoSetpoint = agora - inicioAquecimento) e exibe o resultado 
+//em segundos no Monitor Serial. Esse registro ocorre apenas uma vez.
+
+  // 16. DETECCAO DO SETPOINT 
   if (iniciou && !atingiu && temperatura >= SETPOINT) {
     atingiu = true;
     tempoSetpoint = agora - inicioAquecimento;
@@ -166,7 +250,13 @@ void loop() {
     Serial.println(" segundos");
   }
 
-  // 13. MONITOR SERIAL 
+//17. Monitor Serial: exibe os dados do sistema a cada 2,5 segundos (IMPRESSAO), utilizando agora e ultimoPrint
+//para controlar o intervalo. O comando Serial.print() apresenta o tempo decorrido em HH:MM:SS, a temperatura
+//filtrada e o setpoint com duas casas decimais, além do estado do aquecedor (“LIGADO” ou “DESLIGADO”). 
+//Se o setpoint já tiver sido atingido (atingiu = true), também exibe o tempo necessário para alcançá-lo, em segundos
+//com uma casa decimal. O Serial.println() final encerra a linha de informações.
+
+  // 17. MONITOR SERIAL 
   if (agora - ultimoPrint >= IMPRESSAO) {
     ultimoPrint = agora;
 
